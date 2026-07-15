@@ -1,0 +1,533 @@
+//VC-MTJ
+
+`include"constants.h"
+`include"discipline.h"
+
+module VC_MTJ_core(p, n, state);
+
+inout p, n;
+output state;
+
+electrical p, n, state;
+
+/***************************************************************************************************
+ * 0. Parameters from .mdl / .lib setup
+ **************************************************************************************************/
+//State definition
+parameter integer ini = 1 from [0:1];
+
+//Smooth state-induced conductance transition
+parameter real t_rsmooth = 3e-12;
+
+//Monte Carlo random variables.
+parameter real z_rp  = 0;
+parameter real z_tmr = 0;
+parameter real z_t50 = 0;
+parameter real z_a   = 0;
+parameter real z_w   = 0;
+parameter real z_eta = 0;
+
+//effective top voltage of MTJ to equivalent external write voltage mapping
+parameter real vratio_p  = 0.8;
+parameter real vratio_ap = 0.8;
+parameter real vfit_min  = 1.6;
+parameter real vfit_max  = 2.4;
+
+//Steady-state
+parameter real rp_mu_a  = 114.1122817;
+parameter real rp_mu_b  = 0.180017789;
+parameter real rp_mu_c  = 1.108333982;
+
+parameter real rp_sig_a = 2.45705674;
+parameter real rp_sig_b = 3.93397863;
+parameter real rp_sig_c = 0.916399026;
+
+parameter real tmr_mu_a  = 0.572198649;
+parameter real tmr_mu_b  = 0.505290180;
+
+parameter real tmr_sig_a = 0.001562837;
+parameter real tmr_sig_b = 0.091027265;
+parameter real tmr_sig_c = 0.261932936;
+
+//Probabilistic Psw
+parameter real y0_a = 0.1005543629;
+parameter real y0_b = -0.3642518154;
+parameter real y0_c = 0.3375512292;
+
+parameter real t50_a = -0.0268571501;
+parameter real t50_b = -0.2023076311;
+parameter real t50_c = 1.7689730294;
+
+parameter real amp_a = -1.0679461125;
+parameter real amp_b = 5.0983018830;
+parameter real amp_c = -5.2246142286;
+
+parameter real w_a = -0.2484296130;
+parameter real w_b = 0.8697977039;
+parameter real w_c = -0.4387266590;
+
+parameter real st50_a = 0.1544664595;
+parameter real st50_b = -0.5386098902;
+parameter real st50_c = 0.5807208485;
+
+parameter real samp_a = 0.0814842091;
+parameter real samp_b = -0.2770523218;
+parameter real samp_c = 0.3186725567;
+
+parameter real sw   = 0.0920203869;
+parameter real eta0 = 0.2030650335;
+parameter real seta = 0.6685692209;
+
+//Numerical guards
+parameter real rp_min_ohm = 1.0;
+parameter real tmr_min    = 0.0;
+parameter real w_min_ns   = 1e-3;
+parameter real amp_min    = 1e-6;
+parameter real psw_min    = 0.0;
+parameter real psw_max    = 0.999999;
+
+
+/***************************************************************************************************
+ * 1. Pulse extraction parameters kept inside VA for now
+ **************************************************************************************************/
+//extract effective write pulse
+parameter real v_detect       = 1.1;     // V, if V(p,n) > v_detect, start recording a possible write pulse
+parameter real v_release      = 1.0;     // V, if V(p,n) < v_release after detection, the pulse is considered finished
+parameter real v_top_tol      = 0.05;    // V, Only samples with V(p,n) >= vpeak - v_top_tol, accumulated as the effective high-voltage top region
+parameter real t_sample       = 5e-12;    // s = 5 ps, sampling interval for pulse extraction
+parameter real t_valid_min_ns = 0.7;     // ns, minimum valid extracted top-window width
+parameter real v_peak_reset_tol = 0.01;  // V, reset top-window accumulation if peak rises by more than this
+
+//Random seed for switching Bernoulli trial
+parameter integer seed0 = 12345;
+parameter real seed_offset = 0;
+
+/***************************************************************************************************
+ * 2. Internal variables
+ **************************************************************************************************/
+
+integer Vstate;
+integer pulse_mode;
+integer seed;
+integer pulse_count;
+
+integer seed_base;
+
+real Vmtj;
+real R_now;
+
+real R_p_now;
+real R_ap_now;
+real tmr_now;
+real s_eff;
+real G_eff;
+
+real t_prev;
+real dt_s;
+real dt_ns;
+
+real vpeak;
+real top_t_ns;
+real top_vt;
+real vtop_avg;
+real t_top_ns;
+
+real Psw_last;
+real u_last;
+real Vfit_last;
+
+real eta_val_inst;
+real eta_ap_scale;  // exp(+eta/2), AP -> P
+real eta_p_scale;   // exp(-eta/2), P -> AP
+
+real t_next_sample;
+real t_inactive;
+integer sample_on;
+
+/***************************************************************************************************
+ * 3. Utility functions
+ **************************************************************************************************/
+
+analog function real f_max;
+    input x, xmin;
+    real x, xmin;
+    begin
+        if (x < xmin)
+            f_max = xmin;
+        else
+            f_max = x;
+    end
+endfunction
+
+
+analog function real f_min;
+    input x, xmax;
+    real x, xmax;
+    begin
+        if (x > xmax)
+            f_min = xmax;
+        else
+            f_min = x;
+    end
+endfunction
+
+
+analog function real f_clip;
+    input x, xmin, xmax;
+    real x, xmin, xmax;
+    begin
+        if (x < xmin)
+            f_clip = xmin;
+        else if (x > xmax)
+            f_clip = xmax;
+        else
+            f_clip = x;
+    end
+endfunction
+
+
+/***************************************************************************************************
+ * 4. Static resistance module
+ **************************************************************************************************/
+
+analog function real calc_Rp;
+    input v_in;
+    real v_in;
+
+    real vv;
+    real rp_mu_kohm;
+    real rp_sig_kohm;
+    real rp_ohm;
+
+    begin
+        vv = v_in * v_in;
+
+        rp_mu_kohm =
+            rp_mu_a / (rp_mu_b*vv + rp_mu_c);
+
+        rp_sig_kohm =
+            rp_sig_a + rp_sig_b / (1.0 + rp_sig_c*vv);
+
+        rp_ohm =
+            1.0e3 * (rp_mu_kohm + rp_sig_kohm*z_rp);
+
+        calc_Rp = f_max(rp_ohm, rp_min_ohm);
+    end
+endfunction
+
+
+analog function real calc_TMR;
+    input v_in;
+    real v_in;
+
+    real vv;
+    real tmr_mu;
+    real tmr_sig;
+    real tmr_val;
+
+    begin
+        vv = v_in * v_in;
+
+        tmr_mu =
+            tmr_mu_a / (tmr_mu_b*vv + 1.0);
+
+        tmr_sig =
+            tmr_sig_a + tmr_sig_b / (1.0 + tmr_sig_c*vv);
+
+        tmr_val = tmr_mu + tmr_sig*z_tmr;
+
+        calc_TMR = f_max(tmr_val, tmr_min);
+    end
+endfunction
+
+
+/***************************************************************************************************
+ * 5. Vtop -> Vfit mapping
+ **************************************************************************************************/
+
+analog function real calc_Vfit;
+    input vtop_in, state_in;
+    real vtop_in;
+    integer state_in;
+
+    begin
+        if (state_in >= 1)
+            calc_Vfit = vtop_in / vratio_ap;    // AP -> P
+        else
+            calc_Vfit = vtop_in / vratio_p;     // P -> AP
+    end
+endfunction
+
+
+/***************************************************************************************************
+ * 6. Psw calculation module
+ **************************************************************************************************/
+
+analog function real calc_Psw;
+    input vtop_in, tpw_ns, state_in, eta_ap_scale_in, eta_p_scale_in;
+    real vtop_in, tpw_ns;
+    real eta_ap_scale_in, eta_p_scale_in;
+    integer state_in;
+
+    real vfit_val;
+
+    real y0_val;
+    real t50_val;
+    real amp_val;
+    real w_val;
+    real st50_val;
+    real samp_val;
+    //real eta_val;
+
+    real omega_val;
+    real p_common_val;
+    real lambda_c_val;
+    real psw_val;
+
+    begin
+        vfit_val = calc_Vfit(vtop_in, state_in);
+
+        //Below fitted voltage range 1.6V: no switching
+        if (vfit_val < vfit_min) begin
+            calc_Psw = 0.0;
+        end
+        else begin
+            //Above fitted voltage range 2.4V: clamp to avoid uncontrolled extrapolation
+            vfit_val = f_min(vfit_val, vfit_max);
+
+            //Nominal compact parameters
+            y0_val  = y0_a*vfit_val*vfit_val   + y0_b*vfit_val   + y0_c;
+            t50_val = t50_a*vfit_val*vfit_val  + t50_b*vfit_val  + t50_c;
+            amp_val = amp_a*vfit_val*vfit_val  + amp_b*vfit_val  + amp_c;
+            w_val   = w_a*vfit_val*vfit_val    + w_b*vfit_val    + w_c;
+
+            //Sigma functions
+            st50_val = st50_a*vfit_val*vfit_val + st50_b*vfit_val + st50_c;
+            samp_val = samp_a*vfit_val*vfit_val + samp_b*vfit_val + samp_c;
+
+            //Address-level Monte Carlo parameters
+            t50_val = t50_val + st50_val*z_t50;
+            amp_val = amp_val + samp_val*z_a;
+            w_val   = w_val   + sw*z_w;
+            //eta_val = eta0    + seta*z_eta;
+
+            //Numerical protection
+            amp_val = f_max(amp_val, amp_min);
+            w_val   = f_max(w_val, w_min_ns);
+
+            //Generate common Psw: P_common = y0 + A / {1 + exp[-omega*(t - T50)]}, omega = 2*ln(4)/W20_80
+            omega_val = 2.0*ln(4.0)/w_val;
+
+            p_common_val = y0_val + amp_val/(1.0 + exp(-omega_val*(tpw_ns - t50_val)));
+            p_common_val = f_clip(p_common_val, psw_min, psw_max);
+
+            //Lambda-domain conversion: Lambda_c = -ln(1 - P_common)
+            //Directional splitting: P_AP2P = 1 - exp[-Lambda_c * exp(+eta/2)], P2AP = 1 - exp[-Lambda_c * exp(-eta/2)]
+            lambda_c_val = -ln(1.0 - p_common_val);
+
+            if (state_in >= 1) begin
+                //Current state is AP, switching direction is AP -> P
+                psw_val = 1.0 - exp(-lambda_c_val * eta_ap_scale_in);
+            end
+            else begin
+                //Current state is P, switching direction is P -> AP
+                psw_val = 1.0 - exp(-lambda_c_val * eta_p_scale_in);
+            end
+
+            calc_Psw = f_clip(psw_val, psw_min, psw_max);
+        end
+    end
+endfunction
+
+
+/***************************************************************************************************
+ * 7. Main analog behavior
+ **************************************************************************************************/
+
+analog begin
+
+    //a.Force a reasonably small timestep for pulse extraction
+    //$bound_step(t_sample);//now: 5ps
+	//a. Only force a small timestep while recording a detected write pulse
+	//   In idle mode, Spectre is allowed to choose its own timestep
+	if (pulse_mode == 1)
+		$bound_step(t_sample);
+
+
+    //b.Initialization
+    @(initial_step) begin
+        Vstate = ini;
+
+        // pulse_mode: 0 -> idle, 1 -> recording a possible write pulse
+        pulse_mode = 0;
+
+        if (seed_offset >= 0.0)
+			seed_base = seed0 + $rtoi(seed_offset);
+		else
+			seed_base = seed0 + $rtoi(-seed_offset) + 104729;
+
+        pulse_count = 0;
+		t_inactive    = 1.0e99;
+		t_next_sample = t_inactive;
+		sample_on     = 0;
+
+		//current simulation time
+        t_prev = $abstime;
+
+		//reset
+        vpeak = 0.0;
+        top_t_ns = 0.0;
+        top_vt = 0.0;
+        vtop_avg = 0.0;
+        t_top_ns = 0.0;
+
+        Psw_last = 0.0;
+        u_last = 0.0;
+        Vfit_last = 0.0;
+
+		eta_val_inst = eta0 + seta*z_eta;
+		eta_ap_scale = exp(0.5*eta_val_inst);
+		eta_p_scale  = exp(-0.5*eta_val_inst);
+
+    end
+
+	//c1. Event-driven pulse start
+	//    During idle mode, do not poll every t_sample. Wait until Vmtj crosses v_detect
+	@(cross(V(p,n)-v_detect, +1)) begin
+		if (pulse_mode == 0) begin
+
+		    pulse_mode = 1;
+		    sample_on  = 1;
+
+		    Vmtj = V(p,n);
+
+		    t_prev   = $abstime;
+		    vpeak    = Vmtj;
+		    top_t_ns = 0.0;
+		    top_vt   = 0.0;
+
+		    Psw_last  = 0.0;
+		    u_last    = 0.0;
+		    Vfit_last = 0.0;
+
+		    // Start pulse-internal sampling only after pulse is detected
+		    t_next_sample = $abstime + t_sample;
+		end
+	end
+
+    // c2. One-shot pulse-internal sampling
+	//     The timer is scheduled only after pulse start and disabled after pulse end
+	@(timer(t_next_sample)) begin
+
+		if ((sample_on == 1) && (pulse_mode == 1)) begin
+
+		    Vmtj = V(p,n);
+
+		    dt_s  = $abstime - t_prev;
+		    dt_ns = dt_s * 1.0e9;
+
+		    if (dt_s > 0.0) begin
+
+		        // Track peak voltage
+		        if (Vmtj > vpeak + v_peak_reset_tol) begin
+		            vpeak    = Vmtj;
+		            top_t_ns = 0.0;
+		            top_vt   = 0.0;
+		        end
+		        else if (Vmtj > vpeak) begin
+		            vpeak = Vmtj;
+		        end
+
+		        // Accumulate top-window duration and voltage integral
+		        if (Vmtj >= (vpeak - v_top_tol)) begin
+		            top_t_ns = top_t_ns + dt_ns;
+		            top_vt   = top_vt + Vmtj * dt_ns;
+		        end
+
+		        // Pulse end detected by sampled falling voltage
+		        if (Vmtj < v_release) begin
+
+		            t_top_ns = top_t_ns;
+
+		            if (top_t_ns > 0.0)
+		                vtop_avg = top_vt / top_t_ns;
+		            else
+		                vtop_avg = 0.0;
+
+		            Vfit_last = calc_Vfit(vtop_avg, Vstate);
+
+		            if (t_top_ns < t_valid_min_ns) begin
+		                Psw_last = 0.0;
+		                u_last   = 0.0;
+		            end
+		            else begin
+		                Psw_last = calc_Psw(vtop_avg, t_top_ns, Vstate,
+		                                    eta_ap_scale, eta_p_scale);
+
+		                seed   = seed_base + 7919 * pulse_count;
+		                u_last = $rdist_uniform(seed, 0.0, 1.0);
+
+		                pulse_count = pulse_count + 1;
+
+		                if (u_last < Psw_last) begin
+		                    if (Vstate >= 1)
+		                        Vstate = 0;
+		                    else
+		                        Vstate = 1;
+		                end
+		            end
+
+		            // Stop pulse mode and disable sampling during idle
+		            pulse_mode    = 0;
+		            sample_on     = 0;
+		            t_next_sample = t_inactive;
+
+		            vpeak    = 0.0;
+		            top_t_ns = 0.0;
+		            top_vt   = 0.0;
+		        end
+		        else begin
+		            // Still inside pulse: schedule next 5 ps sample
+		            t_prev = $abstime;
+		            t_next_sample = $abstime + t_sample;
+		        end
+		    end
+		    else begin
+		        // Safety: avoid zero/negative dt rescheduling at same time
+		        t_next_sample = $abstime + t_sample;
+		    end
+		end
+		else begin
+		    // Idle: do not sample
+		    t_next_sample = t_inactive;
+		end
+	end
+
+
+    // d. Continuous electrical behavior, participates in Spectre KCL
+	Vmtj = V(p,n);
+
+	// Calculate both endpoint resistances under current Vmtj
+	// state=0 -> P, state=1 -> AP
+	R_p_now  = calc_Rp(Vmtj);
+	tmr_now  = calc_TMR(Vmtj);
+	R_ap_now = R_p_now * (1.0 + tmr_now);
+
+	// Smooth only the discrete state, not the whole voltage-dependent R(V)
+	s_eff = transition(Vstate, 0, t_rsmooth);
+
+	// Interpolate conductance instead of resistance
+	// This avoids a hard KCL jump when Vstate flips
+	G_eff = (1.0 - s_eff)/R_p_now + s_eff/R_ap_now;
+
+	// Instantaneous equivalent resistance for observation
+	R_now = 1.0/G_eff;
+
+	I(p,n) <+ G_eff * V(p,n);
+
+	// State output is only for observation
+	V(state) <+ transition(Vstate, 0, t_rsmooth);
+
+end
+
+endmodule

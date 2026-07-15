@@ -1,0 +1,174 @@
+**************************************************************************************************************
+*    MODEL   :  field free VC-MTJ mODEL
+*    VERSION :  V0
+*    DATE    :  Jul, 2026
+**************************************************************************************************************
+* In the input netlist, use the below .lib statements to call the desired
+* models in the model file:
+*
+*             Lib name                         							Description
+*
+*       .lib 'vc_mtj_core.lib'  mtj_t                 typical VC-MTJ model, z=0
+*       .lib 'vc_mtj_core.lib'  mtj_mc                mc VC-MTJ model, per instance z generated in .mdl 
+**************************************************************************************************************
+
+**************************************************************************************************************
+*  Device name:
+*           model name              
+*		   vc_mtj_3t
+*
+*  Modified for VCMA probabilistic compact model
+**************************************************************************************************************
+simulator lang=spectre  insensitive=yes
+
+********************************************Lib T************************************************************
+simulator lang=spice
+.lib mtj_t
+.lib 'vc_mtj_core.lib' setup
+simulator lang=spectre
+simOptions options redefinedparams=ignore
+simulator lang=spice
+
+.param
++ vcma_z_rp_rand  = 0
++ vcma_z_tmr_rand = 0
++ vcma_z_t50_rand = 0
++ vcma_z_a_rand   = 0
++ vcma_z_w_rand   = 0
++ vcma_z_eta_rand = 0
++ vcma_u_seed_rand = 0
+
+.lib 'vc_mtj_core.mdl' t
+.endl mtj_t
+
+********************************************Lib MC*************************************************************
+simulator lang=spice
+.lib mtj_mc
+.lib 'vc_mtj_core.lib' setup
+simulator lang=spectre
+simOptions options redefinedparams=ignore
+simulator lang=spice
+
+.param
++ vcma_z_rp_rand   = agauss(0,1,1)
++ vcma_z_tmr_rand  = agauss(0,1,1)
++ vcma_z_t50_rand  = agauss(0,1,1)
++ vcma_z_a_rand    = agauss(0,1,1)
++ vcma_z_w_rand    = agauss(0,1,1)
++ vcma_z_eta_rand  = agauss(0,1,1)
++ vcma_u_seed_rand = agauss(0,100000,1)
+
+.lib 'vc_mtj_core.mdl' t
+.endl mtj_mc
+
+********************************************Lib setup*************************************************************
+simulator lang=spice
+.lib setup
+simulator lang=spectre
+simOptions options redefinedparams=ignore
+simulator lang=spice
+
+*
+* ================================================================================================
+* 0. General settings
+* ================================================================================================
+*
+* init_vcma:
+*   0 -> P
+*   1 -> AP
+*
+* MTJ effective top voltage to equivalent external write voltage mapping:
+*   Vfit_P  = Vtop_avg / vratio_p_vcma
+*   Vfit_AP = Vtop_avg / vratio_ap_vcma
+*
+.param
++ init_vcma      = 1
++ vratio_p_vcma  = 0.8
++ vratio_ap_vcma = 0.8
++ vfit_min_vcma  = 1.6
++ vfit_max_vcma  = 2.4
+
+*
+* ================================================================================================
+* 1. Steady-state Rp/TMR model
+* ================================================================================================
+*
+* V uses actual MTJ voltage V(p,n)
+* Rp_mu and Rp_sig are in kOhm in the formula.
+* Convert to Ohm inside .va by multiplying 1e3.
+*
+* Rp mean:
+*   rp_mu(V) = rp_mu_a / (rp_mu_b*V^2 + rp_mu_c)
+*
+* Rp sigma:
+*   rp_sig(V) = rp_sig_a + rp_sig_b / (1 + rp_sig_c*V^2)
+*
+* TMR mean:
+*   tmr_mu(V) = tmr_mu_a / (tmr_mu_b*V^2 + 1)
+*
+* TMR sigma:
+*   tmr_sig(V) = tmr_sig_a + tmr_sig_b / (1 + tmr_sig_c*V^2)
+*
+.param
++ rp_mu_a_vcma  = 114.1122817
++ rp_mu_b_vcma  = 0.180017789
++ rp_mu_c_vcma  = 1.108333982
++ rp_sig_a_vcma = 2.45705674
++ rp_sig_b_vcma = 3.93397863
++ rp_sig_c_vcma = 0.916399026
++ tmr_mu_a_vcma  = 0.572198649
++ tmr_mu_b_vcma  = 0.505290180
++ tmr_sig_a_vcma = 0.001562837
++ tmr_sig_b_vcma = 0.091027265
++ tmr_sig_c_vcma = 0.261932936
+
+*
+* ================================================================================================
+* 2. Probabilistic Psw compact model
+* ================================================================================================
+*
+* Vfit is equivalent external write voltage.
+* Time unit: ns
+*
+* General quadratic form:
+*   p(Vfit) = p_a*Vfit^2 + p_b*Vfit + p_c
+*
+.param
++ y0_a_vcma   = 0.1005543629
++ y0_b_vcma   = -0.3642518154
++ y0_c_vcma   = 0.3375512292
++ t50_a_vcma  = -0.0268571501
++ t50_b_vcma  = -0.2023076311
++ t50_c_vcma  = 1.7689730294
++ amp_a_vcma  = -1.0679461125
++ amp_b_vcma  = 5.0983018830
++ amp_c_vcma  = -5.2246142286
++ w_a_vcma    = -0.2484296130
++ w_b_vcma    = 0.8697977039
++ w_c_vcma    = -0.4387266590
++ st50_a_vcma = 0.1544664595
++ st50_b_vcma = -0.5386098902
++ st50_c_vcma = 0.5807208485
++ samp_a_vcma = 0.0814842091
++ samp_b_vcma = -0.2770523218
++ samp_c_vcma = 0.3186725567
++ sw_vcma     = 0.0920203869
++ eta_vcma    = 0.2030650335
++ seta_vcma   = 0.6685692209
+
+*
+* ================================================================================================
+* 3. Numerical guards
+* ================================================================================================
+*
+* Numerical protection limits, not fitted physical parameters.
+*
+.param
++ rp_min_ohm_vcma = 1.0
++ tmr_min_vcma    = 0.0
++ w_min_ns_vcma   = 1e-3
++ amp_min_vcma    = 1e-6
++ psw_min_vcma    = 0.0
++ psw_max_vcma    = 0.999999
+
+.endl setup
