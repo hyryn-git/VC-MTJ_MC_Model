@@ -1,24 +1,33 @@
 # Netlist-Based Testbench
-	Standalone Spectre testbenches for the VC-MTJ compact model.
 
+Standalone Spectre testbenches for the VC-MTJ compact model.
 
-	## Quick Start
+## Quick Start
 
-		Run the typical-corner testbench with:
-		./run_tb_typical.sh
+Run the typical-corner testbench with:
 
-		Run the Monte Carlo mismatch testbench with:
-		./run_tb_mc.sh
+```bash
+./run_tb_typical.sh
+```
 
-		Each script removes the previous results, runs the corresponding Spectre netlist, and opens ViVA.
-		Use the Results Browser in ViVA to open the generated psf directory and select the desired waveforms.
+Run the Monte Carlo mismatch testbench with:
 
-	## Model Corners
-		tb_typical.scs: uses the mtj_t corner for a standard transient simulation.
-		tb_mc.scs: uses the mtj_mc corner for one mismatch Monte Carlo run with an embedded transient simulation.
+```bash
+./run_tb_mc.sh
+```
 
-	## Files
-		- tb_typical.scs: typical-corner transient testbench
-		- run_tb_typical.sh: typical-corner simulation script
-		- tb_mc.scs: one-run mismatch Monte Carlo testbench
-		- run_tb_mc.sh: Monte Carlo simulation script
+Each script removes the previous results, runs the corresponding Spectre netlist, and generates a `psf` results directory.
+
+Use the Results Browser in ViVA to open the generated `psf` directory and select the desired waveforms.
+
+## Model Corners
+
+* `tb_typical.scs`: Uses the `mtj_t` corner for a standard transient simulation.
+* `tb_mc.scs`: Uses the `mtj_mc` corner for one mismatch Monte Carlo run with an embedded transient simulation.
+
+## Files
+
+* `tb_typical.scs`: Typical-corner transient testbench.
+* `run_tb_typical.sh`: Typical-corner simulation script.
+* `tb_mc.scs`: One-run mismatch Monte Carlo testbench.
+* `run_tb_mc.sh`: Monte Carlo simulation script.
