@@ -1,0 +1,3 @@
+_faultList = nil
+savedComponent = _faultList 
+_faultList = 'unbound

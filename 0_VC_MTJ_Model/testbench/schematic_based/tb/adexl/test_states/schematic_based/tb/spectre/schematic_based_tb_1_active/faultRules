@@ -1,0 +1,3 @@
+_faultRuleList = nil
+savedComponent = _faultRuleList 
+_faultRuleList = 'unbound

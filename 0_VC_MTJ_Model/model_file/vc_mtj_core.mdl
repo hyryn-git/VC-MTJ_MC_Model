@@ -1,0 +1,79 @@
+****************************************************************************************************
+*                                   VC-MTJ MODEL                                        *
+****************************************************************************************************
+simulator lang=spectre  insensitive=yes
+********************************************Lib T**************************************************
+simulator lang=spice
+.lib t
+.hdl vc_mtj_core.va
+
+.subckt vc_mtj_3t p n state
+simulator lang=spectre
+simOptions options redefinedparams=ignore 
+simulator lang=spice
+
+.param 
++ Init = init_vcma
++ z_rp_l   = 'vcma_z_rp_rand'
++ z_tmr_l  = 'vcma_z_tmr_rand'
++ z_t50_l  = 'vcma_z_t50_rand'
++ z_a_l    = 'vcma_z_a_rand'
++ z_w_l    = 'vcma_z_w_rand'
++ z_eta_l  = 'vcma_z_eta_rand'
++ u_seed_offset_l = 'vcma_u_seed_rand'
+
+X1 p n state VC_MTJ_core
++ ini = Init
++ z_rp  = z_rp_l
++ z_tmr = z_tmr_l
++ z_t50 = z_t50_l
++ z_a   = z_a_l
++ z_w   = z_w_l
++ z_eta = z_eta_l
++ seed_offset = u_seed_offset_l
+
++ vratio_p  = vratio_p_vcma
++ vratio_ap = vratio_ap_vcma
++ vfit_min  = vfit_min_vcma
++ vfit_max  = vfit_max_vcma
++ rp_mu_a  = rp_mu_a_vcma
++ rp_mu_b  = rp_mu_b_vcma
++ rp_mu_c  = rp_mu_c_vcma
++ rp_sig_a = rp_sig_a_vcma
++ rp_sig_b = rp_sig_b_vcma
++ rp_sig_c = rp_sig_c_vcma
++ tmr_mu_a  = tmr_mu_a_vcma
++ tmr_mu_b  = tmr_mu_b_vcma
++ tmr_sig_a = tmr_sig_a_vcma
++ tmr_sig_b = tmr_sig_b_vcma
++ tmr_sig_c = tmr_sig_c_vcma
++ y0_a  = y0_a_vcma
++ y0_b  = y0_b_vcma
++ y0_c  = y0_c_vcma
++ t50_a = t50_a_vcma
++ t50_b = t50_b_vcma
++ t50_c = t50_c_vcma
++ amp_a = amp_a_vcma
++ amp_b = amp_b_vcma
++ amp_c = amp_c_vcma
++ w_a   = w_a_vcma
++ w_b   = w_b_vcma
++ w_c   = w_c_vcma
++ st50_a = st50_a_vcma
++ st50_b = st50_b_vcma
++ st50_c = st50_c_vcma
++ samp_a = samp_a_vcma
++ samp_b = samp_b_vcma
++ samp_c = samp_c_vcma
++ sw     = sw_vcma
++ eta0   = eta_vcma
++ seta   = seta_vcma
++ rp_min_ohm = rp_min_ohm_vcma
++ tmr_min    = tmr_min_vcma
++ w_min_ns   = w_min_ns_vcma
++ amp_min    = amp_min_vcma
++ psw_min    = psw_min_vcma
++ psw_max    = psw_max_vcma
+
+.ends vc_mtj_3t
+.endl t
