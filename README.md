@@ -13,5 +13,5 @@ simulation.
 - [1_VC_MTJ_Python_Model](1_VC_MTJ_Python_Model/README.md)
   provides standalone Monte-Carlo switching, pulse-sequence simulation, and
   R-V/TMR analysis using NumPy with optional Numba acceleration.
-- [Manual_Field_Free_VC-MTJ_v1.0.1.pdf](Manual_Field_Free_VC-MTJ_v1.1.pdf)
+- [Manual_Field_Free_VC-MTJ_v1.1.pdf](Manual_Field_Free_VC-MTJ_v1.1.pdf)
   is the user manual for the Verilog-A/Cadence/Python implementation.
