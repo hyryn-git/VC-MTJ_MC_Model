@@ -38,5 +38,5 @@ If you use this software in your research, please cite this repository using the
 
 This project is licensed under the BSD 3-Clause License. See [LICENSE](LICENSE) for the full license text.
 
-Copyright (c) 2026 HKUST, SEU and Quantsyn company.
+Copyright © 2026 The Hong Kong University of Science and Technology (HKUST), Southeast University (SEU), and Quantsyn.
 
