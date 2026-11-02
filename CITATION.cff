@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+title: "VC-MTJ MC Model"
+type: software
+authors:
+  - family-names: "Hou"
+    given-names: "Yaoru"
+  - family-names: "Di"
+    given-names: "Yantong"
+  - family-names: "Yin"
+    given-names: "Hongjie"
+license: BSD-3-Clause
+repository-code: "https://github.com/hyryn-git/VC-MTJ_MC_Model"
+url: "https://github.com/hyryn-git/VC-MTJ_MC_Model"
+abstract: >-
+  A field-free VC-MTJ compact modeling framework supporting Monte Carlo
+  simulation, with a Verilog-A implementation for Cadence/Spectre circuit
+  simulation and a Python implementation for fast standalone statistical
+  simulation.
